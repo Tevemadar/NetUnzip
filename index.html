@@ -1,11 +1,7 @@
 <!DOCTYPE html>
-<!--
-Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
-Click nbfs://nbhost/SystemFileSystem/Templates/Other/html.html to edit this template
--->
 <html>
     <head>
-        <title>TODO supply a title</title>
+        <title>Demo page for NetUnzip</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
@@ -25,63 +21,27 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/html.html to edit this temp
             }
             pre{
                 width: max-content;
+                max-width: 80%;
                 height: max-content;
+                white-space: pre-wrap;
             }
         </style>
+        <script src="netunzip.js"></script>
+        <script src="inflater.js"></script>
         <script>
             async function tempurl() {
                 return fetch("https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip?redirect=false").then(response => response.json()).then(json => json.url);
             }
+            let zipdir;
             async function startup() {
-//                let size=await fetch(await tempurl(),{method:"HEAD"}).then(response=>parseInt(response.headers.get("Content-Length")));
-//                console.log(size);
-                let eodc = await fetch(await tempurl(), {headers: {range: "bytes=-22"}}).then(response => response.arrayBuffer()).then(buffer => new DataView(buffer));
-                if (eodc.getUint32(0, true) !== 0x06054b50) {
-                    alert("0x06054b50?");
-                    return;
-                }
-                //console.log("Files",eodc.getUint16(10,true));
-                let dirsize = eodc.getUint32(12, true);
-                let diroffset = eodc.getUint32(16, true);
-                console.log(dirsize, diroffset);
-                let dirbuf = await fetch(await tempurl(), {headers: {range: `bytes=${diroffset}-${diroffset + dirsize - 1}`}}).then(response => response.arrayBuffer());
-                let pos = 0;
-                let tdec = new TextDecoder();
+                const log = document.getElementById("log");
+                const start = Date.now();
+                zipdir = await netunzip(location.search ? location.search.substring(1) : tempurl);
+                log.innerText += `Got parsed directory @${Date.now() - start} ms.`;
                 let tab = "";
-                while (pos < dirbuf.byteLength) {
-                    let view = new DataView(dirbuf, pos);
-                    pos += 46;
-                    if (view.getUint32(0, true) !== 0x02014b50) {
-                        alert("0x02014b50?");
-                        return;
-                    }
-                    let entry = {
-                        vermade: view.getUint16(4, true),
-                        verext: view.getUint16(6, true),
-                        gpflags: view.getUint16(8, true),
-                        method: view.getUint16(10, true),
-                        timecode: view.getUint16(12, true),
-                        datecode: view.getUint16(14, true),
-                        crc: view.getUint32(16, true),
-                        compsize: view.getUint32(20, true),
-                        uncompsize: view.getUint32(24, true),
-                        namelength: view.getUint16(28, true),
-                        extralength: view.getUint16(30, true),
-                        commentlength: view.getUint16(32, true),
-                        diskno: view.getUint16(34, true),
-                        intattrs: view.getUint16(36, true),
-                        extattrs: view.getUint32(38, true),
-                        offset: view.getUint32(42, true)
-                    };
-                    entry.name = tdec.decode(new Uint8Array(dirbuf, pos, entry.namelength));
-                    pos += entry.namelength;
-                    entry.extra = new Uint8Array(dirbuf, pos, entry.extralength);
-                    pos += entry.extralength;
-                    entry.comment = tdec.decode(new Uint8Array(dirbuf, pos, entry.commentlength));
-                    pos += entry.commentlength;
-                    let line = `<td><button onclick='load("${btoa(JSON.stringify(entry))}")'>${entry.name}</button></td>`;
-                    line += `<td>${(entry.datecode >> 9) + 1980}/${(entry.datecode >> 5) & 15}/${entry.datecode & 31}</td>`;
-                    line += `<td>${entry.timecode >> 11}:${(entry.timecode >> 5) & 63}:${(entry.timecode & 31) * 2}</td>`;
+                for (const [_, entry] of zipdir.entries) {
+                    let line = `<td><button onclick="load(event)">${entry.name}</button></td>`;
+                    line += `<td>${entry.timestamp}</td>`;
                     line += `<td>${entry.uncompsize}</td>`;
                     line += `<td>${entry.offset}</td>`;
                     line += `<td>${entry.compsize}</td>`;
@@ -93,26 +53,23 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/html.html to edit this temp
                     tab += `<tr>${line}</tr>`;
                 }
                 document.getElementById("dir").innerHTML = tab;
+                log.innerText += ` Built table @${Date.now() - start} ms.`;
             }
-            async function load(b64) {
-                let entry = JSON.parse(atob(b64));
-                if (entry.method !== 0) {
-                    alert("For now method 0 only");
-                    return;
-                }
+            async function load(event) {
+                let entry = zipdir.entries.get(event.target.innerText);
                 if (entry.uncompsize === 0) {
-                    alert("That's a directory.");
+                    alert("That's an empty file or a directory.");
                     return;
                 }
-                let buf = await fetch(await tempurl(), {headers: {range: `bytes=${entry.offset}-${entry.offset + 30 + entry.namelength + entry.extralength + entry.compsize - 1}`}}).then(response => response.arrayBuffer());
+                let data = await zipdir.get(entry);
                 popup.style.display = "block";
-                if (entry.name.endsWith(".xml")) {
-                    pre.innerText = new TextDecoder().decode(new Uint8Array(buf, buf.byteLength - entry.compsize));
+                if (entry.name.endsWith(".xml") || entry.name.endsWith(".txt")) {
+                    pre.innerText = new TextDecoder().decode(data);
                     pre.style.display = "block";
                     img.style.display = "none";
                 }
                 if (entry.name.endsWith(".png")) {
-                    img.src = URL.createObjectURL(new Blob([buf.slice(buf.byteLength - entry.compsize)], {type: "image/png"}));
+                    img.src = URL.createObjectURL(new Blob([data], {type: "image/png"}));
                     pre.style.display = "none";
                     img.style.display = "block";
                 }
@@ -120,12 +77,12 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/html.html to edit this temp
         </script>
     </head>
     <body onload="startup()" onclick="popup.style.display = 'none'">
+        <span id="log"></span><br>
         <table>
             <thead>
                 <tr>
                     <th>name</th>
-                    <th>date</th>
-                    <th>time</th>
+                    <th>timestamp</th>
                     <th>size</th>
                     <th>offset</th>
                     <th>csize</th>
@@ -138,6 +95,6 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/html.html to edit this temp
             </thead>
             <tbody id="dir"></tbody>
         </table>
-        <div id="popup"><pre id="pre"></pre><img id="img" src="" onload="/*URL.revokeObjectURL(event.target.src)*/"></div>
+        <div id="popup"><pre id="pre"></pre><img id="img" src="" onload="globalThis.URL.revokeObjectURL(event.target.src);"></div>
     </body>
 </html>
