@@ -25,21 +25,31 @@
                 height: max-content;
                 white-space: pre-wrap;
             }
+            td{
+                text-align: right;
+            }
         </style>
         <script src="netunzip.js"></script>
         <script src="inflater.js"></script>
         <script>
             async function tempurl() {
-                return fetch("https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip?redirect=false").then(response => response.json()).then(json => json.url);
+//                return fetch("https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip?redirect=false").then(response => response.json()).then(json => json.url);
+//                return "https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip";
+                return "https://data-proxy.ebrains.eu/api/v1/buckets/map-online-quint-test-sept-22/.nesysWorkflowFiles/zippedPyramids/BigTiff_test/Kanin_F6_105_42_s2.dzip";
             }
             let zipdir;
             async function startup() {
                 const log = document.getElementById("log");
                 const start = Date.now();
                 zipdir = await netunzip(location.search ? location.search.substring(1) : tempurl);
-                log.innerText += `Got parsed directory @${Date.now() - start} ms.`;
+                const entries = Array.from(zipdir.entries.values());
+                log.innerText += `Got parsed directory @${Date.now() - start} ms. ${entries.length} items.`;
+                let split = entries.length > 50 ? 10 : 0;
+                if (split)
+                    entries.splice(split, entries.length - 50);
+                log.innerText += ` ${entries.length} will be displayed.`;
                 let tab = "";
-                for (const [_, entry] of zipdir.entries) {
+                for (const entry of entries) {
                     let line = `<td><button onclick="load(event)">${entry.name}</button></td>`;
                     line += `<td>${entry.timestamp}</td>`;
                     line += `<td>${entry.uncompsize}</td>`;
@@ -48,9 +58,13 @@
                     line += `<td>${entry.method}</td>`;
                     line += `<td>${entry.crc.toString(16).toUpperCase().padStart(8, "0")}</td>`;
                     line += `<td>${entry.diskno}</td>`;
-                    line += `<td>${entry.gpflags.toString(16)},${entry.intattrs.toString(16)},${entry.extattrs.toString(16)}</td>`;
+                    line += `<td>${entry.gpflags.toString(16)}</td>`;
+                    line += `<td>${entry.intattrs.toString(16)}</td>`;
+                    line += `<td>${entry.extattrs.toString(16)}</td>`;
                     line += `<td>${entry.comment}</td>`;
                     tab += `<tr>${line}</tr>`;
+                    if (--split === 0)
+                        tab += "<tr><td colspan='12' style='text-align:center'>.  .  .  .  .</td></tr>";
                 }
                 document.getElementById("dir").innerHTML = tab;
                 log.innerText += ` Built table @${Date.now() - start} ms.`;
@@ -63,7 +77,7 @@
                 }
                 let data = await zipdir.get(entry);
                 popup.style.display = "block";
-                if (entry.name.endsWith(".xml") || entry.name.endsWith(".txt")) {
+                if (entry.name.endsWith(".xml") || entry.name.endsWith(".txt") || entry.name.endsWith(".dzi")) {
                     pre.innerText = new TextDecoder().decode(data);
                     pre.style.display = "block";
                     img.style.display = "none";
@@ -89,7 +103,9 @@
                     <th>cmethod</th>
                     <th>crc</th>
                     <th>disk</th>
-                    <th>flags,atts</th>
+                    <th>flags</th>
+                    <th>intatts</th>
+                    <th>extatts</th>
                     <th>comment</th>
                 </tr>
             </thead>
