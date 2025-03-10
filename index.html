@@ -32,16 +32,18 @@
         <script src="netunzip.js"></script>
         <script src="inflater.js"></script>
         <script>
-            async function tempurl() {
-//                return fetch("https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip?redirect=false").then(response => response.json()).then(json => json.url);
-//                return "https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip";
-                return "https://data-proxy.ebrains.eu/api/v1/buckets/map-online-quint-test-sept-22/.nesysWorkflowFiles/zippedPyramids/BigTiff_test/Kanin_F6_105_42_s2.dzip";
-            }
+            // zip64, 35 GB, directory size: 32 MB (275543 entries)
+            // const url=location.search ? location.search.substring(1) : "https://data-proxy.ebrains.eu/api/v1/buckets/map-online-quint-test-sept-22/.nesysWorkflowFiles/zippedPyramids/BigTiff_test/Kanin_F6_105_42_s2.dzip";
+            // zip32 852 MB, directory size: 700 kB (8481 entries)
+            const url = location.search ? location.search.substring(1) : "https://data-proxy.ebrains.eu/api/v1/public/buckets/watest/1362_4645_6647_D1R_P70_M_C17_s001.zip";
+            const zipparam = url.includes("data-proxy")
+                    ? async () => fetch(url + "?redirect=false").then(response => response.json()).then(json => json.url)
+                    : url;
             let zipdir;
             async function startup() {
                 const log = document.getElementById("log");
                 const start = Date.now();
-                zipdir = await netunzip(location.search ? location.search.substring(1) : tempurl);
+                zipdir = await netunzip(zipparam);
                 const entries = Array.from(zipdir.entries.values());
                 log.innerText += `Got parsed directory @${Date.now() - start} ms. ${entries.length} items.`;
                 let split = entries.length > 50 ? 10 : 0;
@@ -84,6 +86,11 @@
                 }
                 if (entry.name.endsWith(".png")) {
                     img.src = URL.createObjectURL(new Blob([data], {type: "image/png"}));
+                    pre.style.display = "none";
+                    img.style.display = "block";
+                }
+                if (entry.name.endsWith(".jpeg")) {
+                    img.src = URL.createObjectURL(new Blob([data], {type: "image/jpeg"}));
                     pre.style.display = "none";
                     img.style.display = "block";
                 }

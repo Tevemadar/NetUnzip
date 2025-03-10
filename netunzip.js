@@ -1,12 +1,18 @@
 async function netunzip(locator) {
     const urlfunc = typeof locator === "function" ? locator : () => locator;
     const eodc = await fetch(await urlfunc(), {headers: {range: "bytes=-22"}}).then(response => response.arrayBuffer()).then(buffer => new DataView(buffer));
+    // alternative code implementation that issues HEAD request (all the time) instead of needing OPTIONS for CORS
+    // https://developer.mozilla.org/en-US/docs/Glossary/CORS-safelisted_request_header#additional_restrictions
+    // const length = parseInt(await fetch(await urlfunc(), {method: "HEAD"}).then(response => response.headers.get("Content-Length")));
+    // const eodc = await fetch(await urlfunc(), {headers: {range: `bytes=${length - 22}-`}}).then(response => response.arrayBuffer()).then(buffer => new DataView(buffer));
     if (eodc.getUint32(0, true) !== 0x06054b50)
         throw "0x06054b50, EODC header signature not found, file may not be a .zip or contains a comment field.";
     const dirsize = eodc.getUint32(12, true);
     let diroffset = eodc.getUint32(16, true);
     if (diroffset === 0xFFFFFFFF) { //Zip64
         const eocd64locator = await fetch(await urlfunc(), {headers: {range: "bytes=-42"}}).then(response => response.arrayBuffer()).then(buffer => new DataView(buffer));
+        // same HEAD-instead-OPTIONS thing as above
+        // const eocd64locator = await fetch(await urlfunc(), {headers: {range: `bytes=${length - 42}-`}}).then(response => response.arrayBuffer()).then(buffer => new DataView(buffer));
         if (eocd64locator.getUint32(0, true) !== 0x07064b50)
             throw "0x07064b50, EODC64locator header signature not found, file may not be a .zip or contains a comment field.";
         const eocd64offset = Number(eocd64locator.getBigUint64(8, true));
